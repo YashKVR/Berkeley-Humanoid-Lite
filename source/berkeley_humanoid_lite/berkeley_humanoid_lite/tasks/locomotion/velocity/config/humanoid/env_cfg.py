@@ -32,8 +32,8 @@ class CommandsCfg:
         rel_heading_envs=1.0,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-1.0, 1.0),
-            lin_vel_y=(-0.5, 0.5),
-            ang_vel_z=(-1.5, 1.5),
+            lin_vel_y=(-1.0, 1.0),
+            ang_vel_z=(-1.0, 1.0),
             heading=(-math.pi, math.pi),
         ),
     )
@@ -48,10 +48,6 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        velocity_commands = ObsTerm(
-            func=mdp.generated_commands,
-            params={"command_name": "base_velocity"}
-        )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
             noise=Unoise(n_min=-0.3, n_max=0.3),
@@ -60,15 +56,19 @@ class ObservationsCfg:
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
+        velocity_commands = ObsTerm(
+            func=mdp.generated_commands,
+            params={"command_name": "base_velocity"}
+        )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=HUMANOID_LITE_JOINTS, preserve_order=True)},
-            noise=Unoise(n_min=-0.05, n_max=0.05),
+            noise=Unoise(n_min=-0.01, n_max=0.01),
         )
         joint_vel = ObsTerm(
             func=mdp.joint_vel_rel,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=HUMANOID_LITE_JOINTS, preserve_order=True)},
-            noise=Unoise(n_min=-2.0, n_max=2.0),
+            noise=Unoise(n_min=-1.5, n_max=1.5),
         )
         actions = ObsTerm(func=mdp.last_action)
 
@@ -95,7 +95,7 @@ class ActionsCfg:
     joint_pos = mdp.JointPositionActionCfg(
         asset_name="robot",
         joint_names=HUMANOID_LITE_JOINTS,
-        scale=0.25,
+        scale=0.5,
         preserve_order=True,
         use_default_offset=True,
     )
@@ -109,12 +109,12 @@ class RewardsCfg:
     # command tracking performance
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.track_lin_vel_xy_yaw_frame_exp,
-        params={"command_name": "base_velocity", "std": 0.5},
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
         weight=2.0,
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.track_ang_vel_z_world_exp,
-        params={"command_name": "base_velocity", "std": 0.5},
+        params={"command_name": "base_velocity", "std": math.sqrt(0.25)},
         weight=1.0,
     )
 
@@ -148,22 +148,22 @@ class RewardsCfg:
     dof_torques_l2 = RewTerm(
         func=mdp.joint_torques_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=HUMANOID_LITE_JOINTS)},
-        weight=-2.0e-5,
+        weight=-1.0e-5
     )
     dof_acc_l2 = RewTerm(
         func=mdp.joint_acc_l2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=HUMANOID_LITE_JOINTS)},
-        weight=-1.0e-7,
+        weight=-2.5e-7,
     )
     dof_pos_limits = RewTerm(
         func=mdp.joint_pos_limits,
-        weight=-1.0,
+        weight=-0.5,
     )
 
     # === Reward for encouraging behaviors ===
     # encourage robot to take steps
     feet_air_time = RewTerm(
-        func=mdp.feet_air_time_positive_biped,
+        func=mdp.feet_air_time,
         params={
             "command_name": "base_velocity",
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_ankle_roll"),
@@ -202,11 +202,11 @@ class RewardsCfg:
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_ankle_roll_joint"])},
         weight=-1.0,
     )
-    joint_deviation_shoulder = RewTerm(
-        func=mdp.joint_deviation_l1,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_shoulder_pitch_joint", ".*_shoulder_roll_joint", ".*_shoulder_yaw_joint"])},
-        weight=-1.0,
-    )
+    # joint_deviation_shoulder = RewTerm(
+    #     func=mdp.joint_deviation_l1,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_shoulder_pitch_joint", ".*_shoulder_roll_joint", ".*_shoulder_yaw_joint"])},
+    #     weight=-1.0,
+    # )
     joint_deviation_elbow = RewTerm(
         func=mdp.joint_deviation_l1,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_elbow_pitch_joint", ".*_elbow_roll_joint"])},
@@ -308,12 +308,12 @@ class EventsCfg:
     )
 
     # === Interval behaviors ===
-    # push_robot = EventTerm(
-    #     func=mdp.push_by_setting_velocity,
-    #     params={"velocity_range": {"x": (-1.0, 1.0), "y": (-1.0, 1.0)}},
-    #     mode="interval",
-    #     interval_range_s=(10.0, 15.0),
-    # )
+    push_robot = EventTerm(
+        func=mdp.push_by_setting_velocity,
+        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+        mode="interval",
+        interval_range_s=(10.0, 15.0),
+    )
 
 
 @configclass
