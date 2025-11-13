@@ -6,3 +6,8 @@ onnxruntime
 cc.udp
 inputs
 pyaml
+pyserial
+opencv-python
+mediapipe
+protobuf
+loguru
