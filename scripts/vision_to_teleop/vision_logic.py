@@ -22,16 +22,25 @@ def calculate_angle(a,b,c):
 cap = cv2.VideoCapture(0)
 
 # Initialize motor control
-# You can start with any motor IDs, or start with None and add motors dynamically
-# Motor IDs can be any valid motor ID on the bus (e.g., 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, etc.)
-# Example: [(2, 0.0), (8, 0.0)] for right shoulder and elbow
-# You can also add more motors later by calling update_motor_angles with new motor IDs
+# Motor-to-bus mapping: can0 = left arm (motors 3, 7), can1 = right arm (motors 4, 8)
+motor_bus_mapping = {
+    3: "can0",  # Left shoulder on can0
+    7: "can0",  # Left elbow on can0
+    4: "can1",  # Right shoulder on can1
+    8: "can1",  # Right elbow on can1
+}
+
 control_thread = None
 try:
     # Start with no motors - they will be added dynamically when update_motor_angles is called
-    # Or you can initialize specific motors: start_continuous_motor_control([(2, 0.0), (8, 0.0)], update_interval_ms=50)
-    control_thread = start_continuous_motor_control(initial_motors=None, update_interval_ms=50)
+    # Pass the motor-to-bus mapping so motors are initialized on the correct CAN bus
+    control_thread = start_continuous_motor_control(
+        initial_motors=None, 
+        update_interval_ms=50,
+        motor_bus_mapping=motor_bus_mapping
+    )
     print("Motor control started. Press 'q' to quit.")
+    print("Motor bus mapping: can0 (motors 3, 7), can1 (motors 4, 8)")
     print("You can update any motor ID using update_motor_angles([(motor_id, angle), ...])")
 except Exception as e:
     print(f"Warning: Could not start motor control: {e}")
@@ -87,7 +96,7 @@ try:
                 right_shoulder_angle = calculate_angle(right_hip, right_shoulder, right_elbow)
 
                 #convert angles to radians
-                left_elbow_angle = np.deg2rad(left_elbow_angle)
+                left_elbow_angle = np.deg2rad(180) - np.deg2rad(left_elbow_angle)
                 right_elbow_angle = np.deg2rad(180) - np.deg2rad(right_elbow_angle)
                 left_shoulder_angle = np.deg2rad(left_shoulder_angle)
                 right_shoulder_angle = np.deg2rad(right_shoulder_angle)
@@ -98,7 +107,7 @@ try:
                 if control_thread is not None:
                     try:
                         # Update any motor IDs you want - they will be initialized automatically
-                        update_motor_angles([(4, -right_shoulder_angle),(8, -right_elbow_angle)])
+                        update_motor_angles([(3, left_shoulder_angle),(4, -right_shoulder_angle),(7, left_elbow_angle),(8, -right_elbow_angle)])
                         # You can add more motors here, e.g.:
                         # update_motor_angles([(1, left_shoulder_angle), (7, left_elbow_angle)])
                     except Exception as e:
