@@ -111,7 +111,7 @@ except Exception as e:
 
 ## Setup mediapipe instances
 try:
-    pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    pose = mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5, min_tracking_confidence=0.5, model_complexity=2)
     hands = mp_hands.Hands(
         static_image_mode=False,
         max_num_hands=2,

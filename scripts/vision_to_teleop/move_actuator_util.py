@@ -139,6 +139,10 @@ def _initialize_motor(device_id, bus, initial_target=0.0):
         kp = 20.0
         kd = 5.0
         torque_limit = 2.5
+    elif device_id == 5 or device_id == 6:
+        kp = 20.0
+        kd = 4.0
+        torque_limit = 4.0
     else:
         kp = 20.0
         kd = 4.0
