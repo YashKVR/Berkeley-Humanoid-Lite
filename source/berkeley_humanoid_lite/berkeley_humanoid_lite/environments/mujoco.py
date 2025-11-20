@@ -37,7 +37,7 @@ class MujocoEnv:
         if cfg.num_joints == 22:
             self.mj_model = mujoco.MjModel.from_xml_path("source/berkeley_humanoid_lite_assets/data/mjcf/bhl_scene.xml")
         else:
-            self.mj_model = mujoco.MjModel.from_xml_path("source/berkeley_humanoid_lite_assets/data/mjcf/bhl_biped_scene.xml")
+            self.mj_model = mujoco.MjModel.from_xml_path("/home/yash/projects/robotics/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_assets/data/robots/berkeley_humanoid/berkeley_humanoid_lite/mjcf/bhl_biped_scene.xml")
 
         self.mj_data = mujoco.MjData(self.mj_model)
         self.mj_model.opt.timestep = self.cfg.physics_dt

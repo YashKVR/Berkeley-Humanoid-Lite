@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     def receive_udp_data(robot_observation_buffer):
         # Setup UDP communication
-        udp = UDP(("0.0.0.0", 11000), ("127.0.0.1", 11000))
+        udp = UDP(("192.168.1.92", 11000), ("127.0.0.1", 11000))
 
         """Thread function to receive UDP data."""
         while True:
