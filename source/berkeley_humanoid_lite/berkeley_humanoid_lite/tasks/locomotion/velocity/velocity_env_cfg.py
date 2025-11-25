@@ -8,6 +8,15 @@ from isaaclab.sensors import ContactSensorCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 
+# Import Isaac Sim IMU sensor API
+try:
+    from omni.isaac.sensor import IMUSensor
+    from omni.isaac.core.utils.stage import get_current_stage
+    from pxr import UsdGeom
+    ISAAC_SIM_IMU_AVAILABLE = True
+except ImportError:
+    ISAAC_SIM_IMU_AVAILABLE = False
+
 
 ##
 # Scene definition
@@ -42,6 +51,9 @@ class FlatTerrainSceneCfg(InteractiveSceneCfg):
 
     # sensors
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/robot/.*", history_length=3, track_air_time=True)
+    
+    # IMU sensor will be added programmatically to robot base/torso
+    # Note: IMU sensor is added via scene callbacks since Isaac Lab doesn't have direct IMUSensorCfg
 
     # lights
     light = AssetBaseCfg(
@@ -81,3 +93,6 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         # we tick all the sensors based on the smallest update period (physics update period)
         if self.scene.contact_forces is not None:
             self.scene.contact_forces.update_period = self.sim.dt
+        
+        # Note: IMU sensors will be added programmatically after scene initialization
+        # using Isaac Sim's IMUSensor API (see imu_sensor.py)

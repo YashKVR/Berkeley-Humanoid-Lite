@@ -93,3 +93,149 @@ def track_ang_vel_z_world_exp(
     asset = env.scene[asset_cfg.name]
     ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_w[:, 2])
     return torch.exp(-ang_vel_error / std**2)
+
+
+def prevent_feet_collapse(
+    env: ManagerBasedRLEnv,
+    min_distance: float = 0.15,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=[".*_ankle_roll"]),
+) -> torch.Tensor:
+    """Penalize feet being too close together (prevent collapse).
+    
+    This function strongly penalizes when the left and right feet come too close
+    to each other, which is physically impossible in the real world but can
+    happen in simulation.
+    
+    Args:
+        env: The RL environment instance
+        min_distance: Minimum allowed distance between feet in meters (default: 0.15m)
+        asset_cfg: SceneEntityCfg specifying which bodies to use (feet/ankle_roll)
+    
+    Returns:
+        torch.Tensor: Penalty for feet being too close (higher = worse)
+    """
+    asset = env.scene[asset_cfg.name]
+    
+    # Get body positions for left and right feet (ankle_roll bodies)
+    body_positions = asset.data.body_pos_w[:, asset_cfg.body_ids, :]
+    
+    # Find left and right foot indices
+    body_names = [asset.body_names[i] for i in asset_cfg.body_ids]
+    left_foot_idx = None
+    right_foot_idx = None
+    
+    for i, name in enumerate(body_names):
+        if "left" in name.lower() and "ankle" in name.lower():
+            left_foot_idx = i
+        elif "right" in name.lower() and "ankle" in name.lower():
+            right_foot_idx = i
+    
+    if left_foot_idx is None or right_foot_idx is None:
+        # If we can't find both feet, return zero penalty
+        return torch.zeros(env.scene.num_envs, device=env.device, dtype=torch.float32)
+    
+    # Calculate horizontal distance between feet (XY plane)
+    left_foot_pos = body_positions[:, left_foot_idx, :2]  # [num_envs, 2] (x, y)
+    right_foot_pos = body_positions[:, right_foot_idx, :2]  # [num_envs, 2] (x, y)
+    
+    foot_distance = torch.norm(left_foot_pos - right_foot_pos, dim=1)  # [num_envs]
+    
+    # Penalize when distance is below minimum
+    # Use exponential penalty that increases sharply as distance decreases
+    distance_deficit = torch.clamp(min_distance - foot_distance, min=0.0)
+    penalty = torch.exp(distance_deficit / 0.05) - 1.0  # Exponential penalty
+    penalty = torch.clamp(penalty, min=0.0, max=100.0)  # Cap penalty
+    
+    return penalty
+
+
+def prevent_knee_collapse(
+    env: ManagerBasedRLEnv,
+    min_distance: float = 0.12,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=[".*_knee_.*"]),
+) -> torch.Tensor:
+    """Penalize knees being too close together (prevent collapse).
+    
+    This function strongly penalizes when the left and right knees come too close
+    to each other, which is physically impossible in the real world but can
+    happen in simulation.
+    
+    Args:
+        env: The RL environment instance
+        min_distance: Minimum allowed distance between knees in meters (default: 0.12m)
+        asset_cfg: SceneEntityCfg specifying which bodies to use (knees)
+    
+    Returns:
+        torch.Tensor: Penalty for knees being too close (higher = worse)
+    """
+    asset = env.scene[asset_cfg.name]
+    
+    # Get body positions for left and right knees
+    body_positions = asset.data.body_pos_w[:, asset_cfg.body_ids, :]
+    
+    # Find left and right knee indices
+    body_names = [asset.body_names[i] for i in asset_cfg.body_ids]
+    left_knee_idx = None
+    right_knee_idx = None
+    
+    for i, name in enumerate(body_names):
+        if "left" in name.lower() and "knee" in name.lower():
+            left_knee_idx = i
+        elif "right" in name.lower() and "knee" in name.lower():
+            right_knee_idx = i
+    
+    if left_knee_idx is None or right_knee_idx is None:
+        # If we can't find both knees, return zero penalty
+        return torch.zeros(env.scene.num_envs, device=env.device, dtype=torch.float32)
+    
+    # Calculate horizontal distance between knees (XY plane)
+    left_knee_pos = body_positions[:, left_knee_idx, :2]  # [num_envs, 2] (x, y)
+    right_knee_pos = body_positions[:, right_knee_idx, :2]  # [num_envs, 2] (x, y)
+    
+    knee_distance = torch.norm(left_knee_pos - right_knee_pos, dim=1)  # [num_envs]
+    
+    # Penalize when distance is below minimum
+    # Use exponential penalty that increases sharply as distance decreases
+    distance_deficit = torch.clamp(min_distance - knee_distance, min=0.0)
+    penalty = torch.exp(distance_deficit / 0.05) - 1.0  # Exponential penalty
+    penalty = torch.clamp(penalty, min=0.0, max=100.0)  # Cap penalty
+    
+    return penalty
+
+
+def maintain_hip_yaw_roll_default(
+    env: ManagerBasedRLEnv,
+    max_deviation: float = 0.1,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"]),
+) -> torch.Tensor:
+    """Penalize deviation of hip yaw and hip roll joints from default positions.
+    
+    This function penalizes when hip yaw and hip roll joints deviate too much
+    from their default positions (0.0), which helps maintain proper leg separation
+    and prevents unrealistic gaits.
+    
+    Args:
+        env: The RL environment instance
+        max_deviation: Maximum allowed deviation from default in radians (default: 0.1 rad)
+        asset_cfg: SceneEntityCfg specifying which joints to use (hip_yaw and hip_roll)
+    
+    Returns:
+        torch.Tensor: Penalty for excessive deviation (higher = worse)
+    """
+    asset = env.scene[asset_cfg.name]
+    
+    # Get current joint positions and default positions
+    current_positions = asset.data.joint_pos[:, asset_cfg.body_ids]
+    default_positions = asset.data.default_joint_pos[:, asset_cfg.body_ids]
+    
+    # Compute deviation from default
+    deviation = torch.abs(current_positions - default_positions)
+    
+    # Penalize deviations beyond max_deviation
+    exceeding_deviation = torch.clamp(deviation - max_deviation, min=0.0)
+    
+    # Use quadratic penalty for excessive deviations
+    penalty = torch.mean(exceeding_deviation**2, dim=1) * 10.0  # Scale penalty
+    penalty = torch.clamp(penalty, min=0.0, max=10.0)  # Cap penalty
+    
+    return penalty

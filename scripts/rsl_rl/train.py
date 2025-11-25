@@ -95,6 +95,20 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    
+    # Setup IMU sensors on robot base/torso for all environments
+    # This uses Isaac Sim's IMUSensor API to add IMU sensors programmatically
+    try:
+        from berkeley_humanoid_lite.tasks.locomotion.velocity.mdp.imu_sensor import setup_imu_sensors_for_all_envs
+        imu_sensors = setup_imu_sensors_for_all_envs(env.unwrapped)
+        if imu_sensors:
+            print(f"[INFO] Successfully created {len(imu_sensors)} IMU sensors")
+            # Store IMU sensors in environment for later access
+            env.unwrapped._imu_sensors = imu_sensors
+    except Exception as e:
+        print(f"[WARNING] Failed to setup IMU sensors: {e}")
+        import traceback
+        traceback.print_exc()
     # wrap for video recording
     if args_cli.video:
         video_kwargs = {

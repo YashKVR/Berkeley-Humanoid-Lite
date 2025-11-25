@@ -60,6 +60,15 @@ class ObservationsCfg:
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
+        # IMU sensor observations (from Isaac Sim IMUSensor)
+        imu_linear_acc = ObsTerm(
+            func=mdp.imu_linear_acceleration,
+            noise=Unoise(n_min=-0.1, n_max=0.1),  # Small noise for accelerometer
+        )
+        imu_angular_vel = ObsTerm(
+            func=mdp.imu_angular_velocity,
+            noise=Unoise(n_min=-0.05, n_max=0.05),  # Small noise for gyroscope
+        )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=HUMANOID_LITE_JOINTS, preserve_order=True)},
@@ -189,6 +198,37 @@ class RewardsCfg:
             "threshold": 1.0,
         },
         weight=-1.0,
+    )
+    
+    # === Prevent unrealistic behaviors (simulation artifacts) ===
+    # Strongly penalize feet collapsing over each other (physically impossible in real world)
+    prevent_feet_collapse = RewTerm(
+        func=mdp.prevent_feet_collapse,
+        params={
+            "min_distance": 0.15,  # Minimum distance between feet in meters
+            "asset_cfg": SceneEntityCfg("robot", body_names=[".*_ankle_roll"]),
+        },
+        weight=-5.0,  # Strong penalty to prevent this behavior
+    )
+    
+    # Strongly penalize knees collapsing over each other (physically impossible in real world)
+    prevent_knee_collapse = RewTerm(
+        func=mdp.prevent_knee_collapse,
+        params={
+            "min_distance": 0.12,  # Minimum distance between knees in meters
+            "asset_cfg": SceneEntityCfg("robot", body_names=[".*_knee_.*"]),
+        },
+        weight=-5.0,  # Strong penalty to prevent this behavior
+    )
+    
+    # Penalize excessive deviation of hip yaw and hip roll from default positions
+    maintain_hip_yaw_roll = RewTerm(
+        func=mdp.maintain_hip_yaw_roll_default,
+        params={
+            "max_deviation": 0.1,  # Maximum allowed deviation in radians (~5.7 degrees)
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_yaw_joint", ".*_hip_roll_joint"]),
+        },
+        weight=-3.0,  # Moderate penalty to encourage staying close to default
     )
 
     # penalize deviation from default of the joints that are not essential for locomotion
