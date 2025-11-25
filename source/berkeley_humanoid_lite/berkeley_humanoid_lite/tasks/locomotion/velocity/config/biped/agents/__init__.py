@@ -1,1 +1,1 @@
-from . import rsl_rl_ppo_cfg
+from . import rsl_rl_ppo_cfg, rsl_rl_ppo_cfg_reliable

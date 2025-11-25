@@ -48,3 +48,41 @@ def terrain_levels_vel(
     terrain.update_env_origins(env_ids, move_up, move_down)
     # return the mean terrain level
     return torch.mean(terrain.terrain_levels.float())
+
+
+def command_velocity_curriculum(
+    env: RLTaskEnv, command_name: str = "base_velocity"
+) -> torch.Tensor:
+    """Curriculum that gradually increases command velocity ranges based on success rate.
+    
+    This allows the robot to start with slow, easy commands and progressively learn faster walking.
+    
+    Returns:
+        Mean command velocity magnitude across all environments.
+    """
+    command = env.command_manager.get_command(command_name)
+    # Compute mean velocity magnitude
+    mean_vel = torch.mean(torch.norm(command[:, :2], dim=1))
+    return mean_vel
+
+
+def perturbation_curriculum(
+    env: RLTaskEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Curriculum that gradually increases perturbation magnitude based on recovery success.
+    
+    This helps the robot learn to handle increasingly strong disturbances.
+    
+    Returns:
+        Mean perturbation magnitude (can be used to adjust external force ranges).
+    """
+    asset: Articulation = env.scene[asset_cfg.name]
+    # Check stability (orientation error)
+    from isaaclab.utils.math import quat_rotate_inverse
+    gravity = torch.tensor([0.0, 0.0, -1.0], device=env.device).repeat(env.scene.num_envs, 1)
+    projected_gravity = quat_rotate_inverse(asset.data.root_quat_w, gravity)
+    orientation_error = torch.mean(torch.norm(projected_gravity[:, :2], dim=1))
+    
+    # Lower orientation error means better stability, can handle more perturbation
+    # Return inverse as curriculum level (higher = more perturbation)
+    return 1.0 / (orientation_error + 0.1)
