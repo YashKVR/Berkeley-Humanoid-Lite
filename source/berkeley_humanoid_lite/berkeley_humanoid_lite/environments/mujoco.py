@@ -1,4 +1,5 @@
 
+import os
 import time
 import threading
 
@@ -33,11 +34,36 @@ class MujocoEnv:
     def __init__(self, cfg: Cfg):
         self.cfg = cfg
 
+        # Get the absolute path to the assets directory
+        # This file is in: source/berkeley_humanoid_lite/berkeley_humanoid_lite/environments/
+        # Assets are in: source/berkeley_humanoid_lite_assets/data/robots/berkeley_humanoid/berkeley_humanoid_lite/mjcf/
+        # Go up from environments/ to source/, then to berkeley_humanoid_lite_assets/
+        current_file = os.path.abspath(__file__)
+        source_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
+        assets_dir = os.path.join(
+            source_dir,
+            "berkeley_humanoid_lite_assets",
+            "data",
+            "robots",
+            "berkeley_humanoid",
+            "berkeley_humanoid_lite",
+            "mjcf"
+        )
+
         # Load appropriate MJCF model based on robot configuration
         if cfg.num_joints == 22:
-            self.mj_model = mujoco.MjModel.from_xml_path("source/berkeley_humanoid_lite_assets/data/mjcf/bhl_scene.xml")
+            xml_path = os.path.join(assets_dir, "bhl_scene.xml")
         else:
-            self.mj_model = mujoco.MjModel.from_xml_path("source/berkeley_humanoid_lite_assets/data/mjcf/bhl_biped_scene.xml")
+            xml_path = os.path.join(assets_dir, "bhl_biped_scene.xml")
+        
+        if not os.path.exists(xml_path):
+            raise FileNotFoundError(
+                f"MuJoCo XML file not found: {xml_path}\n"
+                f"Current working directory: {os.getcwd()}\n"
+                f"Please ensure the file exists at the expected location."
+            )
+        
+        self.mj_model = mujoco.MjModel.from_xml_path(xml_path)
 
         self.mj_data = mujoco.MjData(self.mj_model)
         self.mj_model.opt.timestep = self.cfg.physics_dt
@@ -139,6 +165,9 @@ class MujocoSimulator(MujocoEnv):
         # Start joystick thread
         self.command_controller = Se2Gamepad()
         self.command_controller.run()
+        
+        # Initialize previous actions buffer (needed for observation)
+        self.prev_actions = torch.zeros((self.cfg.num_actions,), dtype=torch.float32)
 
     def reset(self) -> torch.Tensor:
         """Reset the simulation environment to initial state.
@@ -165,12 +194,18 @@ class MujocoSimulator(MujocoEnv):
         """
         step_start_time = time.perf_counter()
 
+        # Store actions for next observation (needed for policy input)
+        self.prev_actions = actions.clone()
+
         for _ in range(self.physics_substeps):
             self._apply_actions(actions)
             mujoco.mj_step(self.mj_model, self.mj_data)
 
         self.mj_viewer.sync()
         observations = self._get_observations()
+        base_quat = self._get_base_quat()
+        base_ang_vel = self._get_base_ang_vel()
+        print("IMU data: ", base_quat, " >>>>>> ",base_ang_vel)
 
         # Maintain real-time simulation
         time_until_next_step = self.cfg.policy_dt - (time.perf_counter() - step_start_time)
@@ -254,11 +289,20 @@ class MujocoSimulator(MujocoEnv):
                           dtype=torch.float32)
 
     def _get_observations(self) -> torch.Tensor:
-        """Get complete observation vector for the policy.
+        """Get raw robot observations for the RlController.
+
+        Returns observations in the format expected by RlController.update():
+        - base_quat: 4
+        - base_ang_vel: 3
+        - joint_pos: 12 (absolute positions, not relative)
+        - joint_vel: 12
+        - mode: 1
+        - command_velocity: 3
+
+        Total: 35 observations
 
         Returns:
-            torch.Tensor: Concatenated observation vector containing base orientation,
-                         angular velocity, joint positions, velocities, and command state
+            torch.Tensor: Raw robot observation vector (35 elements)
         """
         command_mode_switch = self.command_controller.commands["mode_switch"]
         command_velocity_x = self.command_controller.commands["velocity_x"]
@@ -271,11 +315,13 @@ class MujocoSimulator(MujocoEnv):
         self.command_velocity_y = command_velocity_y * 0.5
         self.command_velocity_yaw = command_velocity_yaw
 
+        # Return raw observations (RlController will process them)
         return torch.cat([
-            self._get_base_quat(),
-            self._get_base_ang_vel(),
-            self._get_joint_pos()[self.cfg.action_indices],
-            self._get_joint_vel()[self.cfg.action_indices],
-            torch.tensor([self.mode, self.command_velocity_x, self.command_velocity_y, self.command_velocity_yaw],
-                        dtype=torch.float32),
+            self._get_base_quat(),  # base_quat: 4
+            self._get_base_ang_vel(),  # base_ang_vel: 3
+            self._get_joint_pos()[self.cfg.action_indices],  # joint_pos: 12 (absolute)
+            self._get_joint_vel()[self.cfg.action_indices],  # joint_vel: 12
+            torch.tensor([self.mode], dtype=torch.float32),  # mode: 1
+            torch.tensor([self.command_velocity_x, self.command_velocity_y, self.command_velocity_yaw], dtype=torch.float32),  # command_velocity: 3
         ], dim=-1)
+###AP IMU - mjData.sensordata
