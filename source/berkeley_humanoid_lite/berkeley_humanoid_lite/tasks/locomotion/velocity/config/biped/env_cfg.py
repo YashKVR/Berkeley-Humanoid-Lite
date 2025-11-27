@@ -60,15 +60,6 @@ class ObservationsCfg:
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
-        # IMU sensor observations (from Isaac Sim IMUSensor)
-        imu_linear_acc = ObsTerm(
-            func=mdp.imu_linear_acceleration,
-            noise=Unoise(n_min=-0.1, n_max=0.1),  # Small noise for accelerometer
-        )
-        imu_angular_vel = ObsTerm(
-            func=mdp.imu_angular_velocity,
-            noise=Unoise(n_min=-0.05, n_max=0.05),  # Small noise for gyroscope
-        )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,
             params={"asset_cfg": SceneEntityCfg("robot", joint_names=HUMANOID_LITE_LEG_JOINTS, preserve_order=True)},

@@ -54,20 +54,11 @@ class ObservationsCfg:
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
-            noise=Unoise(n_min=-0.3, n_max=0.3),
+            noise=Unoise(n_min=-0.5, n_max=0.5),
         )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
-            noise=Unoise(n_min=-0.05, n_max=0.05),
-        )
-        # IMU sensor observations (from Isaac Sim IMUSensor)
-        imu_linear_acc = ObsTerm(
-            func=mdp.imu_linear_acceleration,
-            noise=Unoise(n_min=-0.1, n_max=0.1),  # Small noise for accelerometer
-        )
-        imu_angular_vel = ObsTerm(
-            func=mdp.imu_angular_velocity,
-            noise=Unoise(n_min=-0.05, n_max=0.05),  # Small noise for gyroscope
+            noise=Unoise(n_min=-0.1, n_max=0.1),
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel,

@@ -205,7 +205,7 @@ class MujocoSimulator(MujocoEnv):
         observations = self._get_observations()
         base_quat = self._get_base_quat()
         base_ang_vel = self._get_base_ang_vel()
-        print("IMU data: ", base_quat, " >>>>>> ",base_ang_vel)
+        print("IMU data: ", self._get_projected_gravity(), " >>>>>> ",base_ang_vel)
 
         # Maintain real-time simulation
         time_until_next_step = self.cfg.policy_dt - (time.perf_counter() - step_start_time)
